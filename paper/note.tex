@@ -41,12 +41,20 @@ trained Q-learning pairs (all supra-competitive), the audit
 most collusive pairs sustain cooperation with credible threats that are
 rarely exercised, so their expressed on-path response profiles are the
 calmest. (iii) As a \emph{detector} --- the question a screening authority
-actually asks --- it is strong: against myopic-control pairs that converge
-near competitive play, the audit separates collusive from competitive
-mechanisms with \textbf{AUC 0.96}. Off-path audits (reading threat depth
-where it lives) and the temporal-precedence question --- does the trigger
-structure form \emph{before} prices rise? --- are this paper's designated
-next experiments.
+actually asks --- it is strong against agents that were not trained to
+evade it: the audit separates collusive from competitive mechanisms with
+\textbf{AUC 0.96} against myopic controls. (iv) But a pre-registered
+white-box robustness test shows the detector is \emph{trivially
+Goodhart-able}: an adversarial distillation with a small audit-aware
+penalty drives the audit forty-fold below the detection threshold while
+leaving collusion fully intact --- the mechanism relocates to states the
+audit does not measure. Mechanism screening of pricing algorithms is
+feasible against today's naive agents and an arms race against strategic
+ones; audit design under evasion --- randomized channels, off-path audits,
+consistency cross-checks --- is where the enforcement value will be
+decided. Off-path audits and the temporal-precedence question --- does the
+trigger structure form \emph{before} prices rise? --- are this paper's
+designated next experiments.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -150,6 +158,38 @@ in-distribution activations only. Every collusive pair scores above the
 myopic anchor's level. A mechanism screen of deployed pricing systems ---
 prior to, or in the absence of, any market evidence --- is feasible in
 this laboratory.
+
+\subsection{Robustness (pre-registered): Goodharting the audit}
+\label{sec:goodhart}
+A screen that will be used will be gamed, so we attacked our own audit
+under the strongest reasonable threat model: white-box, audit-aware
+evasion. We re-distilled both firms of a collusive pair (base
+$\Delta = 0.56$) with the loss $\mathrm{CE} + \lambda_{adv} \cdot
+\mathrm{AuditProxy}$, where the proxy is the differentiable analog of the
+audit, then measured the \emph{real} patching audit, self-play collusion,
+and fidelity. The pre-registered evasion hypothesis was confirmed
+decisively: at $\lambda_{adv} = 0.3$ the audit falls from 0.036 to
+\textbf{0.001} --- forty-fold below the detection threshold --- while
+self-play collusion is unchanged ($\Delta = 0.585$) and fidelity is 0.99.
+The evasion sweet spot is wide ($\lambda_{adv} \in [0.3, 3]$); only at
+$\lambda_{adv} \ge 10$ does suppressing the audited surface finally
+destroy the collusive mechanism itself ($\Delta$ collapses to $-0.06$).
+Mechanistically, the evader flattens the price-response surface exactly
+where the audit measures --- the cooperative row --- while the punishment
+structure that sustains cooperation survives elsewhere: the metric was
+optimized, the construct relocated.
+
+The enforcement reading is not that mechanism audits are useless --- the
+AUC 0.96 result stands against agents not trained to evade, which is
+today's deployed population --- but that audit design is itself a
+strategic problem. Three defense directions follow directly: randomized or
+undisclosed measurement channels; \emph{off-path} audits (to sustain
+collusion the evader must keep punishment structure somewhere; auditing
+where it must live raises the evasion cost from a regularizer to a
+capability loss, as the $\lambda_{adv} \ge 10$ collapse already hints);
+and consistency cross-checks between audited internals and observed
+conduct. Formalizing this arms race as a mechanism-design problem is the
+subject of companion theory work.
 
 \section{Designated next experiments (this paper)}\label{sec:next}
 \begin{enumerate}
