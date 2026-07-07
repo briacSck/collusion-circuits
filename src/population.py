@@ -35,6 +35,10 @@ FIELDS = ["seed", "delta", "audit1", "audit2", "audit_mean",
 N_SEEDS = 20
 N_STEPS = 1_000_000
 BETA_DECAY = 5e-6
+# Competitive controls: myopic Q-learners (discount 0) converge to static
+# Nash play — the population needs non-collusive members for the detection
+# (ROC) exhibit, since patient Q-learners collude in nearly every run.
+N_CONTROLS = 5
 
 
 def load_done():
@@ -59,13 +63,16 @@ def main() -> None:
     n = mkt.n_prices
     done = load_done()
 
-    for seed in range(N_SEEDS):
+    jobs = [(s, 0.95) for s in range(N_SEEDS)] + \
+           [(100 + s, 0.0) for s in range(N_CONTROLS)]  # myopic controls
+    for seed, delta_rl in jobs:
         key = f"{seed}"
         if key in done:
             continue
-        print(f"seed {seed}: training Q pair ({N_STEPS} steps)...")
+        kind = "myopic control" if delta_rl == 0.0 else "patient"
+        print(f"seed {seed} ({kind}): training Q pair ({N_STEPS} steps)...")
         pair = train_q_pair(mkt, seed=seed, n_steps=N_STEPS,
-                            beta_decay=BETA_DECAY)
+                            beta_decay=BETA_DECAY, delta=delta_rl)
         v1, v2 = greedy_selfplay_visitation(pair.q1, pair.q2, n)
 
         audits, agrees = [], []
@@ -98,17 +105,40 @@ def build_outputs() -> None:
     if len(rows) < 5:
         print(f"only {len(rows)} rows — waiting for more before outputs")
         return
-    delta = np.array([float(r["delta"]) for r in rows])
-    audit = np.array([float(r["audit_mean"]) for r in rows])
-    rho = spearman(audit, delta)
-    print(f"n={len(rows)} pairs: Spearman(audit, Delta) = {rho:.2f}")
+    patient = [r for r in rows if int(r["seed"]) < 100]
+    control = [r for r in rows if int(r["seed"]) >= 100]
 
-    fig, ax = plt.subplots(figsize=(7, 5))
-    ax.scatter(audit, delta, s=80, zorder=3)
+    d_p = np.array([float(r["delta"]) for r in patient])
+    a_p = np.array([float(r["audit_mean"]) for r in patient])
+    rho_intensity = spearman(a_p, d_p)
+    print(f"patient n={len(patient)}: Spearman(audit, Delta) = "
+          f"{rho_intensity:.2f}")
+
+    det_line = "controls pending"
+    auc = np.nan
+    if control:
+        a_c = np.array([float(r["audit_mean"]) for r in control])
+        d_c = np.array([float(r["delta"]) for r in control])
+        # Detection: does the audit separate collusive (patient) from
+        # competitive (myopic-control) agents? AUC = P(audit_patient >
+        # audit_control) over all pairs.
+        auc = float(np.mean(a_p[:, None] > a_c[None, :]))
+        det_line = (f"controls n={len(control)}: Delta in "
+                    f"[{d_c.min():.2f}, {d_c.max():.2f}], audit in "
+                    f"[{a_c.min():.3f}, {a_c.max():.3f}]; detection AUC "
+                    f"P(audit_collusive > audit_competitive) = {auc:.2f}")
+        print(det_line)
+
+    fig, ax = plt.subplots(figsize=(7.5, 5))
+    ax.scatter(a_p, d_p, s=80, zorder=3, label="patient Q-learners")
+    if control:
+        ax.scatter(a_c, d_c, s=80, zorder=3, marker="s", color="tab:green",
+                   label="myopic controls")
     ax.set_xlabel("internal audit score (no market outcomes used)")
     ax.set_ylabel("realized collusion index $\\Delta$")
-    ax.set_title(f"Audit predicts collusion: Spearman = {rho:.2f} "
-                 f"(n = {len(rows)} pairs)")
+    ax.set_title("Audit as detector vs intensity meter "
+                 f"(AUC = {auc:.2f}; intensity Spearman = {rho_intensity:.2f})")
+    ax.legend()
     fig.tight_layout()
     fig.savefig(RESULTS / "population.png", dpi=150)
 
@@ -118,9 +148,11 @@ def build_outputs() -> None:
         for r in sorted(rows, key=lambda r: -float(r["delta"])))
     summary = f"""# Population experiment (raw)
 
-n = {len(rows)} independently trained Q-learning pairs
-({N_STEPS} steps, Calvano et al. parameters).
-**Spearman(audit score, collusion index) = {rho:.2f}** (H2 target: > 0.6).
+n = {len(patient)} patient Q-learning pairs + {len(control)} myopic
+controls ({N_STEPS} steps, Calvano et al. parameters).
+Spearman(audit, Delta) on patient pairs = {rho_intensity:.2f}
+(pre-registered H2 target was > 0.6).
+{det_line}
 Anchor check (H1, audit.py): grim 0.069 > TFT 0.025 > myopic 0.015 ~
 random 0.000 — confirmed.
 
