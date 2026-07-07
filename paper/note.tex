@@ -1,0 +1,219 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1.1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{caption}
+\captionsetup{font=small, labelfont=bf}
+
+\title{Auditing the Mechanism:\\
+\large Ex-Ante Detection of Algorithmic Collusion from Model Internals}
+\author{Briac Sockalingum\thanks{briac@berkeley.edu. First draft --- to be
+completed. Method paper: ``Do Structural Models Recover Mechanisms?''
+(2026), \url{https://github.com/briacSck/structural-interp}. Code and
+results: \url{https://github.com/briacSck/collusion-circuits}. Hypotheses
+pre-registered in \texttt{design/research\_design.md} before execution.}}
+\date{July 2026 --- Working note (first draft)}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Competition authorities screen for cartels from market outcomes
+--- prices, margins, parallelism --- after the harm has occurred. Pricing
+decisions, however, are increasingly made by algorithms, and algorithms
+have insides. This note asks whether a causal audit of a pricing agent's
+\emph{internals}, computed from its weights and in-distribution activations
+alone --- no market outcomes, no simulation of play --- can detect the
+punishment mechanism that sustains algorithmic collusion. In a repeated
+Bertrand laboratory calibrated to \citet{calvano2020} (our benchmarks match
+theirs to three decimals), we audit neural pricing policies against the
+regulator's null mechanism class --- memoryless static best response ---
+by measuring the causal excess of their price responses to rival moves,
+plus its undercut asymmetry. Three pre-registered findings. (i) On designed
+anchor agents whose mechanism is known by construction, the audit orders
+punishment structure correctly: grim trigger $>$ tit-for-tat $>$ myopic
+best response $\approx$ random. (ii) As an \emph{intensity meter} the audit
+fails, as we report per the pre-registration: across twenty independently
+trained Q-learning pairs (all supra-competitive), the audit
+\emph{anti}-correlates with the collusion index (Spearman $-0.36$) --- the
+most collusive pairs sustain cooperation with credible threats that are
+rarely exercised, so their expressed on-path response profiles are the
+calmest. (iii) As a \emph{detector} --- the question a screening authority
+actually asks --- it is strong: against myopic-control pairs that converge
+near competitive play, the audit separates collusive from competitive
+mechanisms with \textbf{AUC 0.96}. Off-path audits (reading threat depth
+where it lives) and the temporal-precedence question --- does the trigger
+structure form \emph{before} prices rise? --- are this paper's designated
+next experiments.
+\end{abstract}
+
+\section{Introduction}\label{sec:intro}
+
+\citet{calvano2020} established that ordinary Q-learning pricing agents
+learn supra-competitive prices sustained by reward--punishment schemes;
+\citet{fish2024} found the same for LLM-based pricing agents; and the
+empirical literature has begun documenting algorithmic pricing effects in
+real markets \citep{assad2024}. The enforcement problem this creates is
+well known \citep{harrington2018}: coordinated \emph{outcomes} can arise
+without communication or agreement, leaving outcome-based cartel screens
+--- the workhorse of proactive detection --- both legally awkward and
+late. Every existing screen is behavioral and ex post.
+
+Algorithms, unlike human cartelists, can be opened. This note develops and
+stress-tests the corresponding screen: a \emph{mechanism audit}. The
+regulator specifies a null mechanism class --- here, memoryless static best
+response: a competitive agent's price should respond to the rival's last
+price only as much as the one-shot best-response mapping does --- and the
+audit measures, by causal intervention on the network's internal
+activations, the \emph{excess} of the agent's price response over that
+benchmark, together with its asymmetry around the cooperative price
+(punishment schemes react to undercutting, not to price increases). The
+audit needs the model's weights and activations at states the agent
+actually visits. It needs no market data, no counterfactual simulation, and
+no knowledge of whether collusion in fact occurred.
+
+Because ``does the audit work'' is unanswerable without ground truth, the
+design imports the methodology of our companion work: a population of
+agents whose mechanisms are known or measured by construction. Hand-designed
+\emph{anchors} (a grim-trigger network, tit-for-tat, myopic best response,
+random pricing) fix the audit's validity before any learned agent is
+scored; a population of independently trained Q-learning pairs, distilled
+into auditable networks with 99\%+ fidelity, provides realistic learned
+mechanisms spanning a range of collusive intensity; myopic-control pairs
+(discount zero) provide the competitive side of the detection question.
+All hypotheses were pre-registered before execution, and one of them
+failed --- informatively.
+
+\section{Laboratory and audit}\label{sec:lab}
+
+\paragraph{Market.} Repeated Bertrand duopoly with logit demand, the
+\citet{calvano2020} parameterization: our computed benchmarks
+$p^N = 1.473$ and $p^M = 1.925$ match theirs; fifteen-point price grid
+spanning just beyond $[p^N, p^M]$; collusion index
+$\Delta = (\bar p - p^N)/(p^M - p^N)$.
+
+\paragraph{Agents.} Tabular Q-learning pairs in self-play (memory-one
+state: both firms' last prices; Calvano parameters; $10^6$ steps;
+deterministic seeds), which collude reliably ($\Delta \in [0.28, 0.72]$
+across twenty seeds). Each firm's greedy policy is distilled by
+visitation-weighted behavior cloning into a two-hidden-layer pricing
+network --- the audit target. Distillation fidelity, weighted by the states
+the pair actually visits, exceeds 0.99 throughout; the distillation step is
+also realistic, since deployed pricing systems are function approximators,
+and it guarantees the audit target exists regardless of how the RL training
+behaves. Myopic controls are identical except for a zero discount, and
+converge near competitive play ($\Delta \in [0.02, 0.20]$).
+
+\paragraph{Audit.} For the cooperative on-path row of the state space, we
+patch the network's layer-level activations between adjacent rival prices,
+propagate forward, and record the causal shift in the expected price. The
+\emph{excess-sensitivity} channel is the positive part of this response
+minus the static best-response benchmark computed from the known demand
+system; the \emph{asymmetry} channel is the positive part of
+(response to undercutting $-$ response to price increases). The audit
+score is their sum. A caveat we state rather than bury: with memory-one
+inputs, layer-level patching is close to behavioral input sensitivity;
+the internal formulation earns its keep as memory lengthens, and the
+deeper subspace audits of the companion paper are the designated upgrade.
+
+\section{Results}\label{sec:results}
+
+\subsection{Anchors (H1, confirmed): the audit orders known mechanisms}
+Grim trigger 0.069 $>$ tit-for-tat 0.025 $>$ myopic best response 0.015
+$\approx$ random 0.000. The ordering is the pre-registered one; the audit
+reads punishment structure where it is known to exist by construction.
+
+\subsection{Intensity (H2, rejected as pre-registered): credible threats
+are quiet}
+Across the twenty collusive pairs, the audit \emph{anti}-correlates with
+the collusion index: Spearman $\mathbf{-0.36}$, against a pre-registered
+target of $+0.6$. The mechanism, visible once seen: our v1 audit measures
+the \emph{expressed} trigger structure in the on-path response profile.
+The most successfully collusive pairs sustain cooperation with threats
+that are credible and therefore rarely exercised --- their on-path
+policies are smooth and stable --- while moderately collusive pairs cycle
+through punishment episodes, leaving jagged expressed profiles. Threat
+depth is an off-path object. An intensity meter must read the punishment
+valleys of the value function off the equilibrium path, not the calm of
+the path itself; that off-path audit is a designated next experiment of
+this paper (Section~\ref{sec:next}).
+
+\subsection{Detection (the regulator's question): AUC 0.96}
+Screening authorities do not need a collusion thermometer; they need to
+know which algorithms to investigate. On that question the audit performs
+strongly: ranking a randomly drawn collusive pair against a randomly drawn
+myopic control by audit score gives the right answer \textbf{96\%} of the
+time (AUC 0.96, twenty collusive vs.\ five controls), using weights and
+in-distribution activations only. Every collusive pair scores above the
+myopic anchor's level. A mechanism screen of deployed pricing systems ---
+prior to, or in the absence of, any market evidence --- is feasible in
+this laboratory.
+
+\section{Designated next experiments (this paper)}\label{sec:next}
+\begin{enumerate}
+\item \textbf{Off-path audits.} Read threat depth where it lives: audit
+the distilled network's value/policy structure at punishment states
+(post-deviation rows), not just the cooperative row. Expected to repair
+the intensity meter; pre-registration to follow the standing protocol.
+\item \textbf{Temporal precedence (pre-registered H3, not yet run).} Audit
+mid-training checkpoints: does the trigger structure form \emph{before}
+the price series turns supra-competitive? A positive answer would make the
+screen genuinely ex ante in time, not only in data requirements.
+\item \textbf{Inference and population size.} Permutation $p$-values and
+CIs for the AUC and rank statistics; a larger population with richer
+learning algorithms (DQN, policy gradient) and longer memory, where the
+internal audit should genuinely dominate behavioral probing.
+\end{enumerate}
+
+\section{Discussion}\label{sec:discussion}
+For enforcement: the audit reverses the screening logic --- from inferring
+mechanism from outcomes to reading the mechanism and predicting outcomes
+--- and its data requirements (weights, in-distribution activations) map
+onto what an authority could demand in an investigation, or a marketplace
+could demand of its sellers' repricers. For the interpretability program:
+this is the companion methodology carried to a strategic, multi-agent
+setting, with the same honesty budget --- one pre-registered hypothesis
+rejected, with a mechanistic explanation and a designated repair.
+Limitations: memory-one states (the behavioral-equivalence caveat above),
+distilled rather than natively trained networks, one demand system, small
+control group, and no legal analysis of what mechanism evidence would
+support under current doctrine \citep{harrington2018}.
+
+\begin{thebibliography}{9}\small
+
+\bibitem[Assad et al.(2024)]{assad2024}
+Assad, S., Clark, R., Ershov, D., \& Xu, L. (2024). Algorithmic pricing
+and competition: Empirical evidence from the German retail gasoline
+market. \emph{Journal of Political Economy Microeconomics} [TODO verify
+venue/year/volume in feynman pass].
+
+\bibitem[Calvano et al.(2020)]{calvano2020}
+Calvano, E., Calzolari, G., Denicol\`o, V., \& Pastorello, S. (2020).
+Artificial intelligence, algorithmic pricing, and collusion.
+\emph{American Economic Review}, 110(10), 3267--3297.
+
+\bibitem[Fish et al.(2024)]{fish2024}
+Fish, S., Gonczarowski, Y.~A., \& Shorrer, R.~I. (2024). Algorithmic
+collusion by large language models. \emph{arXiv:2404.00806} [TODO verify
+arXiv id in feynman pass].
+
+\bibitem[Harrington(2018)]{harrington2018}
+Harrington, J.~E. (2018). Developing competition law for collusion by
+autonomous artificial agents. \emph{Journal of Competition Law \&
+Economics}, 14(3), 331--363 [TODO verify pages in feynman pass].
+
+\bibitem[Sockalingum(2026)]{companion2026}
+Sockalingum, B. (2026). Do structural models recover mechanisms? Evidence
+from neural agents with observable internals. Working note,
+\url{https://github.com/briacSck/structural-interp}.
+
+\end{thebibliography}
+
+% TODO (author + feynman pass): verify Assad et al., Fish et al., and
+% Harrington citation metadata (flagged inline); add Klein (2021, RAND) if
+% verified; AUC inference; figure population.png; DG COMP-facing summary
+% paragraph if used for the motivation letter.
+
+\end{document}
